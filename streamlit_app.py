@@ -14,14 +14,18 @@ st.set_page_config(
 )
 
 # =================================================================
-# ## FUNGSI KONEKSI GOOGLE API
+# ## KONFIGURASI DAN FUNGSI KONEKSI GOOGLE API
 # =================================================================
 
-# Autentikasi dasar menggunakan secrets
-CREDS_INFO = st.secrets["gcp_service_account"]
-SHEET_DETAIL_NAME = st.secrets["sheet_detail"]
-SHEET_REKAP_NAME = st.secrets["sheet_rekap"]
-DRIVE_FOLDER_ID = st.secrets["drive_folder_id"]
+# Ambil konfigurasi dari Streamlit Secrets
+try:
+    CREDS_INFO = st.secrets["gcp_service_account"]
+    SHEET_DETAIL_NAME = st.secrets["sheet_detail"]
+    SHEET_REKAP_NAME = st.secrets["sheet_rekap"]
+    DRIVE_FOLDER_ID = st.secrets["drive_folder_id"]
+except KeyError as e:
+    st.error(f"Kesalahan Konfigurasi: Kunci '{e.args[0]}' tidak ditemukan di .streamlit/secrets.toml. Mohon periksa file secrets Anda.")
+    st.stop()
 
 @st.cache_resource(ttl=3600)
 def get_gspread_client():
@@ -59,14 +63,14 @@ def upload_to_drive(drive_service, uploaded_file, file_name):
         'parents': [DRIVE_FOLDER_ID]
     }
     
-    # Gunakan io.BytesIO untuk membuat objek yang dapat diunggah
+    # Membaca file yang diunggah Streamlit ke objek bytes
     file_content = uploaded_file.getvalue()
     media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype=uploaded_file.type, resumable=True)
     
     file = drive_service.files().create(
         body=file_metadata,
         media_body=media,
-        fields='id, webContentLink' # Meminta link konten web
+        fields='id, webContentLink' 
     ).execute()
     
     # URL Foto yang dapat diakses publik (jika folder sudah diset publik)
@@ -81,11 +85,11 @@ drive_service = get_drive_service()
 CURRENT_TIME = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 st.title("👕 Aplikasi Pengumpulan Data Pembeli Baju")
-st.markdown("Silakan isi data pemesanan baju di bawah ini.")
+st.markdown("Silakan isi data pesanan baju di bawah ini.")
 
-UKURAN_BAJU = ["XS","S", "M", "L", "XL", "XXL"]
-MODEL_LENGAN = ["Pendek", "Panjang"]
-STATUS_BAYAR = ["Belum Bayar", "Lunas Cash", "Lunas Transfer"]
+UKURAN_BAJU = ["S", "M", "L", "XL", "XXL"]
+MODEL_LENGAN = ["Pendek", "Panjang", "3/4"]
+STATUS_BAYAR = ["Belum Bayar", "DP", "Lunas Cash", "Lunas Transfer"]
 
 bukti_transfer = None
 url_foto = "N/A"
@@ -116,7 +120,7 @@ with st.form(key='data_form'):
     status_bayar = st.radio("Status Pembayaran", options=STATUS_BAYAR)
     
     if status_bayar == "Lunas Transfer":
-        st.subheader("Bukti Transfer")
+        st.subheader("Bukti Transfer (Wajib)")
         bukti_transfer = st.file_uploader(
             "Unggah Foto Bukti Transfer (Max 5MB)", 
             type=['png', 'jpg', 'jpeg'],
@@ -130,8 +134,9 @@ with st.form(key='data_form'):
 # ## LOGIKA PENGIRIMAN DATA
 # =================================================================
 if submit_button:
+    # --- Validasi ---
     if not all([nama, alamat, telp, juru_arah, jumlah > 0]):
-        st.error("❌ Harap lengkapi Nama, Alamat, Telepon, Juru Arah, dan Jumlah Baju.")
+        st.error("❌ Harap lengkapi semua kolom wajib.")
         st.stop()
     
     if status_bayar == "Lunas Transfer" and bukti_transfer is None:
@@ -149,60 +154,45 @@ if submit_button:
             file_name_drive = f"Bukti_{nama.replace(' ', '_')}_{datetime.now().timestamp()}.{file_extension}"
             url_foto = upload_to_drive(drive_service, bukti_transfer, file_name_drive)
         except Exception as e:
-            st.error(f"❌ Gagal mengunggah foto ke Google Drive: {e}. Cek ID Folder Drive Anda.")
+            st.error(f"❌ Gagal mengunggah foto ke Google Drive: {e}. Pastikan FOLDER ID dan Izin Service Account sudah benar.")
             st.stop()
 
-    # --- 2. PERSIAPAN DATA ---
+    # --- 2. PERSIAPAN DATA DICT ---
     data_dict = {
-        'Nama': nama,
-        'Alamat': alamat,
-        'Telp': telp,
-        'Jumlah Baju': int(jumlah),
-        'Ukuran Baju': ukuran,
-        'Model Lengan': model,
-        'Status Pembayaran': status_bayar,
-        'Juru Arah': juru_arah,
-        'Tanggal Pemesanan': CURRENT_TIME,
-        'URL Foto': url_foto
+        'Nama': nama, 'Alamat': alamat, 'Telp': telp, 'Jumlah Baju': int(jumlah), 
+        'Ukuran Baju': ukuran, 'Model Lengan': model, 
+        'Status Pembayaran': status_bayar, 'Juru Arah': juru_arah,
+        'Tanggal Pemesanan': CURRENT_TIME, 'URL Foto': url_foto
     }
     
     try:
-        # --- 3. PENULISAN KE SHEET 'DETAIL PESANAN' ---
+        # --- 3. PENULISAN KE SHEET 'DETAIL PESANAN' (10 KOLOM) ---
         ws_detail = spreadsheet_obj.worksheet(SHEET_DETAIL_NAME)
         data_detail = [
-            '', # Kolom 'No'
-            data_dict['Tanggal Pemesanan'],
-            data_dict['Nama'],
-            data_dict['Alamat'],
-            data_dict['Telp'],
-            data_dict['Ukuran Baju'],
-            data_dict['Model Lengan'],
-            data_dict['Status Pembayaran'],
-            data_dict['Juru Arah'],
-            data_dict['URL Foto'] # Kolom baru
+            '', # No
+            data_dict['Tanggal Pemesanan'], data_dict['Nama'], data_dict['Alamat'], 
+            data_dict['Telp'], data_dict['Ukuran Baju'], data_dict['Model Lengan'], 
+            data_dict['Status Pembayaran'], data_dict['Juru Arah'], 
+            data_dict['URL Foto'] 
         ]
         ws_detail.append_row(data_detail)
 
-        # --- 4. PENULISAN KE SHEET 'REKAP PESANAN' ---
+        # --- 4. PENULISAN KE SHEET 'REKAP PESANAN' (8 KOLOM) ---
         ws_rekap = spreadsheet_obj.worksheet(SHEET_REKAP_NAME)
         data_rekap = [
-            '', # Kolom 'No'
-            data_dict['Tanggal Pemesanan'],
-            data_dict['Nama'],
-            data_dict['Alamat'],
-            data_dict['Jumlah Baju'],
-            data_dict['Status Pembayaran'],
-            data_dict['Juru Arah'],
-            data_dict['URL Foto'] # Kolom baru
+            '', # No
+            data_dict['Tanggal Pemesanan'], data_dict['Nama'], data_dict['Alamat'],
+            data_dict['Jumlah Baju'], data_dict['Status Pembayaran'], 
+            data_dict['Juru Arah'], data_dict['URL Foto'] # PERBAIKAN: URL Foto di kolom ke-8
         ]
         ws_rekap.append_row(data_rekap)
 
-        st.success(f"✅ Data pesanan untuk {nama} berhasil direkam ke Sheets dan Foto Bukti Transfer diunggah.")
+        st.success(f"✅ Data pesanan untuk {data_dict['Nama']} berhasil direkam ke Sheets dan Foto Bukti Transfer diunggah.")
         st.balloons()
         st.experimental_rerun()
 
     except gspread.exceptions.WorksheetNotFound as wnf:
-        st.error(f"Gagal mengirim data. Nama sheet tidak ditemukan: {wnf}. Pastikan nama sheet di Sheets dan Secrets sesuai.")
+        st.error(f"Gagal: Nama sheet tidak ditemukan: {wnf}. Pastikan nama sheet di Sheets dan Secrets sesuai.")
     except Exception as e:
         st.error(f"Terjadi kesalahan saat menyimpan data: {e}.")
         st.exception(e)
