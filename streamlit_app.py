@@ -1,11 +1,3 @@
-import logging
-
-# Suppress noisy Streamlit "missing ScriptRunContext" warnings that
-# appear when running in certain non-standard environments (bare mode).
-# We set the Streamlit logger to ERROR level early so the messages
-# are not emitted during import/initialization.
-logging.getLogger("streamlit").setLevel(logging.ERROR)
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime
