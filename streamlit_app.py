@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 import gspread 
 from googleapiclient.discovery import build
-from google.auth import service_account
+from google.oauth2 import service_account
 from googleapiclient.http import MediaIoBaseUpload
 import io
 
