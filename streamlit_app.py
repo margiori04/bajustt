@@ -65,11 +65,9 @@ STATUS_BAYAR = ["Belum Bayar", "Lunas Cash", "Lunas Transfer"]
 # INPUT DATA DIRI (SEMUA DI LUAR FORM!!)
 st.header("Informasi Pembeli & Juru Arah")
 col_a, col_b = st.columns(2)
-with col_a:
-    nama = st.text_input("Nama Lengkap", placeholder="Masukkan nama pembeli")
-    telp = st.text_input("Nomor Telepon", placeholder="08xxxxxxxxxx")
-with col_b:
-    juru_arah = st.text_input("Juru Arah/Koordinator", placeholder="Nama yang bertanggung jawab")
+juru_arah = st.text_input("Juru Arah/Koordinator", placeholder="Nama yang bertanggung jawab")
+nama = st.text_input("Nama Lengkap", placeholder="Masukkan nama pembeli")
+telp = st.text_input("Nomor Telepon", placeholder="08xxxxxxxxxx")
 alamat = st.text_area("Alamat Lengkap", placeholder="Masukkan alamat pengiriman")
 
 st.header("Detail Pesanan")
