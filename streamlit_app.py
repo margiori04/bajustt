@@ -174,7 +174,7 @@ if submit_button:
 
         st.success(f"✅ Data pesanan untuk {data_dict['Nama']} berhasil direkam ke Sheets.")
         st.balloons()
-        st.experimental_rerun()
+        st.rerun()
 
     except gspread.exceptions.WorksheetNotFound as wnf:
         st.error(f"Gagal: Nama sheet tidak ditemukan: {wnf}. Pastikan nama sheet di Sheets dan Secrets sesuai.")
