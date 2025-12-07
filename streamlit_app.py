@@ -57,22 +57,17 @@ def get_drive_service():
 
 def upload_to_drive(drive_service, uploaded_file, file_name):
     """Mengunggah file dari Streamlit ke Google Drive."""
-    
     file_metadata = {
         'name': file_name,
         'parents': [DRIVE_FOLDER_ID]
     }
-    
-    # Membaca file yang diunggah Streamlit ke objek bytes
     file_content = uploaded_file.getvalue()
     media = MediaIoBaseUpload(io.BytesIO(file_content), mimetype=uploaded_file.type, resumable=True)
-    
     file = drive_service.files().create(
         body=file_metadata,
         media_body=media,
         fields='id, webContentLink' 
     ).execute()
-    
     # URL Foto yang dapat diakses publik (jika folder sudah diset publik)
     return f"https://drive.google.com/uc?export=view&id={file.get('id')}"
 
@@ -87,9 +82,9 @@ CURRENT_TIME = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 st.title("👕 Aplikasi Pengumpulan Data Pembeli Baju")
 st.markdown("Silakan isi data pesanan baju di bawah ini.")
 
-UKURAN_BAJU = ["S", "M", "L", "XL", "XXL"]
-MODEL_LENGAN = ["Pendek", "Panjang", "3/4"]
-STATUS_BAYAR = ["Belum Bayar", "DP", "Lunas Cash", "Lunas Transfer"]
+UKURAN_BAJU = ["XS", "S", "M", "L", "XL", "XXL"]
+MODEL_LENGAN = ["Pendek", "Panjang"]
+STATUS_BAYAR = ["Belum Bayar", "Lunas Cash", "Lunas Transfer"]
 
 bukti_transfer = None
 url_foto = "N/A"
@@ -102,23 +97,34 @@ with st.form(key='data_form'):
         telp = st.text_input("Nomor Telepon", placeholder="08xxxxxxxxxx")
     with col_b:
         juru_arah = st.text_input("Juru Arah/Koordinator", placeholder="Nama yang bertanggung jawab")
-    
     alamat = st.text_area("Alamat Lengkap", placeholder="Masukkan alamat pengiriman")
 
     st.header("Detail Pesanan")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        jumlah = st.number_input("Jumlah Baju", min_value=1, step=1)
-    
-    with col2:
-        ukuran = st.selectbox("Ukuran Baju", options=UKURAN_BAJU)
+    jumlah = st.number_input("Jumlah Baju", min_value=1, step=1, format="%d", value=1)
 
-    with col3:
-        model = st.selectbox("Model Lengan Baju", options=MODEL_LENGAN)
+    list_ukuran = []
+    list_model = []
+
+    for i in range(1, int(jumlah) + 1):
+        st.markdown(f"#### Baju {i}")
+        col1, col2 = st.columns(2)
+        with col1:
+            ukuran = st.selectbox(
+                f"Ukuran Baju {i}", 
+                options=UKURAN_BAJU, 
+                key=f"ukuran_{i}"
+            )
+        with col2:
+            model = st.selectbox(
+                f"Model Lengan Baju {i}", 
+                options=MODEL_LENGAN, 
+                key=f"model_{i}"
+            )
+        list_ukuran.append(ukuran)
+        list_model.append(model)
     
     status_bayar = st.radio("Status Pembayaran", options=STATUS_BAYAR)
-    
+
     if status_bayar == "Lunas Transfer":
         st.subheader("Bukti Transfer (Wajib)")
         bukti_transfer = st.file_uploader(
@@ -127,7 +133,7 @@ with st.form(key='data_form'):
             accept_multiple_files=False,
             key='bukti_transfer_uploader'
         )
-    
+
     submit_button = st.form_submit_button(label='Kirim Data Pesanan')
 
 # =================================================================
@@ -135,14 +141,12 @@ with st.form(key='data_form'):
 # =================================================================
 if submit_button:
     # --- Validasi ---
-    if not all([nama, alamat, telp, juru_arah, jumlah > 0]):
+    if not all([nama, alamat, telp, juru_arah, int(jumlah) > 0]):
         st.error("❌ Harap lengkapi semua kolom wajib.")
         st.stop()
-    
     if status_bayar == "Lunas Transfer" and bukti_transfer is None:
         st.error("❌ Mohon unggah Bukti Transfer jika status pembayaran Lunas Transfer.")
         st.stop()
-
     if spreadsheet_obj is None or drive_service is None:
         st.error("Gagal terhubung ke layanan Google. Cek kredensial Secrets Anda.")
         st.stop()
@@ -156,11 +160,16 @@ if submit_button:
         except Exception as e:
             st.error(f"❌ Gagal mengunggah foto ke Google Drive: {e}. Pastikan FOLDER ID dan Izin Service Account sudah benar.")
             st.stop()
-
+    
     # --- 2. PERSIAPAN DATA DICT ---
+    # Gabung ukuran dan model per baju dalam satu string
+    detail_baju_str = "; ".join([f"Baju {i+1}: {list_ukuran[i]}-{list_model[i]}" for i in range(int(jumlah))])
+
     data_dict = {
         'Nama': nama, 'Alamat': alamat, 'Telp': telp, 'Jumlah Baju': int(jumlah), 
-        'Ukuran Baju': ukuran, 'Model Lengan': model, 
+        'Detail Semua Baju': detail_baju_str,  # <--- penampungan semua input
+        'Ukuran Baju': ", ".join(list_ukuran),  # opsional
+        'Model Lengan': ", ".join(list_model),  # opsional
         'Status Pembayaran': status_bayar, 'Juru Arah': juru_arah,
         'Tanggal Pemesanan': CURRENT_TIME, 'URL Foto': url_foto
     }
@@ -171,9 +180,8 @@ if submit_button:
         data_detail = [
             '', # No
             data_dict['Tanggal Pemesanan'], data_dict['Nama'], data_dict['Alamat'], 
-            data_dict['Telp'], data_dict['Ukuran Baju'], data_dict['Model Lengan'], 
-            data_dict['Status Pembayaran'], data_dict['Juru Arah'], 
-            data_dict['URL Foto'] 
+            data_dict['Telp'], data_dict['Detail Semua Baju'], 
+            data_dict['Status Pembayaran'], data_dict['Juru Arah'], data_dict['URL Foto'] 
         ]
         ws_detail.append_row(data_detail)
 
@@ -183,7 +191,7 @@ if submit_button:
             '', # No
             data_dict['Tanggal Pemesanan'], data_dict['Nama'], data_dict['Alamat'],
             data_dict['Jumlah Baju'], data_dict['Status Pembayaran'], 
-            data_dict['Juru Arah'], data_dict['URL Foto'] # PERBAIKAN: URL Foto di kolom ke-8
+            data_dict['Juru Arah'], data_dict['URL Foto']
         ]
         ws_rekap.append_row(data_rekap)
 
