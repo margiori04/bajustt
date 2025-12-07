@@ -20,6 +20,7 @@ st.set_page_config(
 # Ambil konfigurasi dari Streamlit Secrets
 try:
     CREDS_INFO = st.secrets["gcp_service_account"]
+    spreadsheet_name = st.secrets["spreadsheet_name"] 
     SHEET_DETAIL_NAME = st.secrets["sheet_detail"]
     SHEET_REKAP_NAME = st.secrets["sheet_rekap"]
     DRIVE_FOLDER_ID = st.secrets["drive_folder_id"]
@@ -32,7 +33,6 @@ def get_gspread_client():
     """Mengotentikasi ke Google Sheets dan mengembalikan objek Spreadsheet."""
     try:
         gc = gspread.service_account_from_dict(CREDS_INFO)
-        spreadsheet_name = st.secrets["spreadsheet_name"] 
         sh = gc.open(spreadsheet_name) 
         return sh
     except Exception as e:
